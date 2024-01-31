@@ -1,0 +1,178 @@
+using UnityEngine;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
+using System.Collections;
+using System.Collections.Generic;
+
+public class MyCharacterController : MonoBehaviour
+{
+    public Animator animator;
+    public AudioSource audioSource;
+
+    [Header("Audio Clips")]
+    public AudioClip WalkingAudioClip;
+    public AudioClip SingingAudioClip;
+    public AudioClip DancingAudioClip;
+    public AudioClip JumpingAudioClip;
+    public AudioClip ExercisingAudioClip;
+    public AudioClip SleepingAudioClip;
+    public AudioClip IdleAudioClip;
+    // Add more audio clips as needed
+
+    private TcpListener listener;
+    private TcpClient client;
+    private NetworkStream stream;
+
+    private bool isAnimating = false;
+
+    void Start()
+    {
+        try
+        {
+            listener = new TcpListener(IPAddress.Parse("192.168.25.77"), 1031);//Enter your IP address here
+            listener.Start();
+            Debug.Log("Server started, waiting for connection...");
+
+            client = listener.AcceptTcpClient();
+            stream = client.GetStream();
+
+            Debug.Log("Client connected!");
+            animator = GetComponent<Animator>();
+            audioSource = GetComponent<AudioSource>(); // Get the AudioSource component
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error setting up the server: {e}");
+            Application.Quit();
+        }
+    }
+
+    async void Update()
+    {
+        if (stream != null && stream.DataAvailable && !isAnimating)
+        {
+            byte[] buffer = new byte[1024];
+            int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+            string command = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            ProcessCommand(command);
+        }
+    }
+
+    void ProcessCommand(string command)
+    {
+        if (int.TryParse(command, out int fingerCount))
+        {
+            string animationTrigger = GetAnimationTrigger(fingerCount);
+
+            // Play animation
+            PlayAnimation(animationTrigger);
+
+            // Load and play audio dynamically based on animation trigger
+            PlayAudio(animationTrigger);
+        }
+    }
+
+    void PlayAudio(string animationTrigger)
+    {
+        // Define a mapping between animation triggers and corresponding audio clip fields
+        Dictionary<string, AudioClip> audioClipMappings = new Dictionary<string, AudioClip>
+        {
+            {"IsWalking", WalkingAudioClip},
+            {"IsSinging", SingingAudioClip},
+            {"IsDancing", DancingAudioClip},
+            {"IsJumping", JumpingAudioClip},
+            {"IsSleeping", SleepingAudioClip},
+            {"IsExercising", ExercisingAudioClip},
+            {"IsIdle", IdleAudioClip}
+        };
+
+        // Check if the mapping contains the current animation trigger
+        if (audioClipMappings.ContainsKey(animationTrigger))
+        {
+            // Use the mapped audio clip
+            AudioClip audioClip = audioClipMappings[animationTrigger];
+
+            // Check if audioClip is not null (i.e., there's a specific audio clip)
+            if (audioClip != null)
+            {
+                // Assign the audio clip and play
+                audioSource.clip = audioClip;
+                audioSource.Play();
+            }
+            else
+            {
+                Debug.LogError("Audio clip not assigned for: " + animationTrigger);
+            }
+        }
+        else
+        {
+            Debug.LogError("Audio mapping not found for: " + animationTrigger);
+        }
+    }
+
+    void PlayAnimation(string animationName)
+    {
+        if (!isAnimating)
+        {
+            StartCoroutine(PlayAnimationCoroutine(animationName));
+        }
+    }
+
+    IEnumerator PlayAnimationCoroutine(string animationName)
+    {
+        isAnimating = true;
+        animator.SetBool(animationName, true);
+        yield return new WaitForSeconds(0.1f);
+        animator.SetBool(animationName, false);
+        isAnimating = false;
+    }
+
+    private void OnApplicationQuit()
+    {
+        StopServer();
+    }
+
+    void StopServer()
+    {
+        if (listener != null)
+        {
+            listener.Stop();
+        }
+
+        if (stream != null)
+        {
+            stream.Close();
+        }
+
+        if (client != null)
+        {
+            client.Close();
+        }
+    }
+
+    string GetAnimationTrigger(int fingersOpen)
+    {
+        // Your logic to determine the animation trigger based on fingersOpen
+        // Customize this logic based on your specific requirements
+
+        switch (fingersOpen)
+        {
+            case 1:
+                return "IsWalking";
+            case 2:
+                return "IsSinging";
+            case 3:
+                return "IsDancing";
+            case 4:
+                return "IsJumping";
+            case 5:
+                return "IsSleeping";
+            case 0:
+                return "IsExercising";
+            default:
+                return "IsIdle";
+        }
+    }
+}
